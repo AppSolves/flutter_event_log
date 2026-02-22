@@ -123,9 +123,9 @@ namespace event_log
 
         if (action == EvtSubscribeActionError)
         {
-            // Handle error
-            DWORD error_code = reinterpret_cast<DWORD>(event_handle);
-            // Could log or report error
+            // Handle error - event_handle contains error information
+            // Get the actual error code from GetLastError() if needed
+            // DWORD error_code = GetLastError();
             return 0;
         }
 
