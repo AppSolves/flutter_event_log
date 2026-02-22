@@ -40,7 +40,6 @@ namespace event_log
             EVT_HANDLE config = EvtOpenChannelConfig(nullptr, channel_name, 0);
             if (config)
             {
-                DWORD buffer_size = 0;
                 DWORD buffer_used_config = 0;
                 EVT_VARIANT property_value;
 
