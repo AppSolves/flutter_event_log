@@ -19,7 +19,7 @@
 ## 📸 Demo
 
 <p align="center">
-  <kbd> <img src="./assets/github/demo.png" alt="Event Log Plugin Demo" width="100%" height="auto" min-height="50vw"> </kbd>
+  <kbd> <img src="./example/assets/readme.png" alt="Event Log Plugin Demo" width="100%" height="auto" min-height="50vw"> </kbd>
   <br>
   <em>Real-time event monitoring and historical queries in action</em>
 </p>
