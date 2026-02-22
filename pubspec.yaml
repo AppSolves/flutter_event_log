@@ -1,0 +1,24 @@
+name: event_log
+description: A comprehensive Flutter plugin for accessing the Windows Event Log (Event Viewer). Monitor system events, query historical logs, and manage subscriptions with full Windows Event Log API support.
+version: 1.0.0
+homepage: https://github.com/AppSolves/flutter_event_log
+
+environment:
+  sdk: ^3.11.0
+  flutter: ">=3.3.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  plugin:
+    platforms:
+      windows:
+        pluginClass: EventLogPlugin
