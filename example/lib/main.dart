@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:event_log/event_log.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -271,6 +272,9 @@ class _EventLogDemoState extends State<EventLogDemo> {
   }
 
   Widget _buildStatusBar() {
+    if (kDebugMode) {
+      print('Status updated: $_status');
+    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.grey[200],
