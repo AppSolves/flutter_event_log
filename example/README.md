@@ -1,7 +1,7 @@
 # Event Log Plugin - Example App
 
 <p align="center">
-  <img src="https://via.placeholder.com/600x400/1a1a1a/42A5F5?text=Event+Log+Example+App" alt="Example App">
+  <kbd> <img src="./assets/readme.png" alt="Example App" width="100%" height="auto" min-height="50vw"> </kbd>
 </p>
 
 A comprehensive demonstration of the **event_log** Flutter plugin capabilities. This example showcases real-time event monitoring, historical queries, advanced filtering, and all plugin features in a beautiful Material Design 3 interface.

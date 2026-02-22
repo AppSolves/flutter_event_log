@@ -1,7 +1,7 @@
 # event_log
 
 <p align="center">
-  <img src="./assets/github/readme.png" alt="Event Log Plugin Demo">
+  <kbd> <img src="./assets/github/readme.png" alt="Event Log Plugin Demo" width="100%" height="auto" min-height="50vw"> </kbd>
 </p>
 <br>
 <p align="center">
@@ -19,7 +19,7 @@
 ## 📸 Demo
 
 <p align="center">
-  <img src="./assets/github/demo.png" alt="Event Log Plugin Demo">
+  <kbd> <img src="./assets/github/demo.png" alt="Event Log Plugin Demo" width="100%" height="auto" min-height="50vw"> </kbd>
   <br>
   <em>Real-time event monitoring and historical queries in action</em>
 </p>
