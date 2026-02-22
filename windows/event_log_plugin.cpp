@@ -234,3 +234,15 @@ namespace event_log
     }
 
 } // namespace event_log
+
+// C API for Flutter plugin registration
+extern "C"
+{
+    __declspec(dllexport) void EventLogPluginRegisterWithRegistrar(
+        FlutterDesktopPluginRegistrarRef registrar)
+    {
+        event_log::EventLogPlugin::RegisterWithRegistrar(
+            flutter::PluginRegistrarManager::GetInstance()
+                ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar));
+    }
+}
