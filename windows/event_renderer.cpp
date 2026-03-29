@@ -6,9 +6,28 @@
 #include <vector>
 #include <codecvt>
 #include <locale>
+#include <algorithm>
+#include <cctype>
 
 namespace event_log
 {
+    namespace
+    {
+        std::string TrimTrailingWhitespace(std::string value)
+        {
+            value.erase(
+                std::find_if(
+                    value.rbegin(),
+                    value.rend(),
+                    [](unsigned char ch)
+                    {
+                        return !std::isspace(ch);
+                    })
+                    .base(),
+                value.end());
+            return value;
+        }
+    } // namespace
 
     EventRenderer::EventRenderer()
     {
@@ -30,7 +49,15 @@ namespace event_log
 
         // Optionally get XML and message
         auto xml = RenderEventAsXml(event_handle);
-        auto message = GetEventMessage(event_handle);
+        std::string provider_name;
+        auto provider_it = system_props.find(flutter::EncodableValue("providerName"));
+        if (provider_it != system_props.end() &&
+            std::holds_alternative<std::string>(provider_it->second))
+        {
+            provider_name = std::get<std::string>(provider_it->second);
+        }
+
+        auto message = GetEventMessage(event_handle, provider_name);
 
         if (!xml.empty())
         {
@@ -236,12 +263,63 @@ namespace event_log
         return WideToUtf8(buffer.data());
     }
 
-    std::string EventRenderer::GetEventMessage(EVT_HANDLE event_handle)
+    std::string EventRenderer::GetEventMessage(
+        EVT_HANDLE event_handle,
+        const std::string &provider_name)
     {
-        // This requires opening the publisher metadata and formatting the message
-        // For simplicity, we'll skip this in the first implementation
-        // It can be added later if needed
-        return "";
+        if (provider_name.empty())
+        {
+            return "";
+        }
+
+        auto provider_wide = Utf8ToWide(provider_name);
+        EVT_HANDLE publisher_metadata = EvtOpenPublisherMetadata(
+            nullptr,
+            provider_wide.c_str(),
+            nullptr,
+            0,
+            0);
+        if (!publisher_metadata)
+        {
+            return "";
+        }
+
+        DWORD buffer_used = 0;
+        EvtFormatMessage(
+            publisher_metadata,
+            event_handle,
+            0,
+            0,
+            nullptr,
+            EvtFormatMessageEvent,
+            0,
+            nullptr,
+            &buffer_used);
+
+        if (GetLastError() != ERROR_INSUFFICIENT_BUFFER || buffer_used == 0)
+        {
+            EvtClose(publisher_metadata);
+            return "";
+        }
+
+        std::vector<WCHAR> buffer(buffer_used);
+        if (!EvtFormatMessage(
+                publisher_metadata,
+                event_handle,
+                0,
+                0,
+                nullptr,
+                EvtFormatMessageEvent,
+                static_cast<DWORD>(buffer.size()),
+                buffer.data(),
+                &buffer_used))
+        {
+            EvtClose(publisher_metadata);
+            return "";
+        }
+
+        EvtClose(publisher_metadata);
+        return TrimTrailingWhitespace(WideToUtf8(buffer.data()));
     }
 
     std::string EventRenderer::FileTimeToIso8601(const FILETIME &ft)

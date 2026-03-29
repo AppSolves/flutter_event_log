@@ -1,4 +1,6 @@
 import 'package:event_log/event_log_method_channel.dart';
+import 'package:event_log/src/exceptions/event_log_exception.dart';
+import 'package:event_log/src/models/channel_info.dart';
 import 'package:event_log/src/models/event_filter.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,9 +16,23 @@ void main() {
         .setMockMethodCallHandler(channel, (MethodCall methodCall) async {
           switch (methodCall.method) {
             case 'listChannels':
-              return ['System', 'Application', 'Security'];
+              return [
+                {'name': 'System', 'enabled': true, 'type': 'Admin'},
+                {'name': 'Application', 'enabled': true, 'type': 'Admin'},
+                {'name': 'Security', 'enabled': false, 'type': 'Admin'},
+              ];
             case 'queryEvents':
               return [];
+            case 'getChannelInfo':
+              final arguments = methodCall.arguments as Map<Object?, Object?>?;
+              if (arguments?['channelName'] == 'Missing') {
+                throw PlatformException(
+                  code: 'CHANNEL_NOT_FOUND',
+                  message: 'Channel not found',
+                  details: {'channel': 'Missing'},
+                );
+              }
+              return {'name': 'System', 'enabled': true, 'type': 'Admin'};
             case 'subscribeToEvents':
               return 'subscription-123';
             case 'unsubscribe':
@@ -34,7 +50,11 @@ void main() {
 
   test('listChannels', () async {
     final channels = await platform.listChannels();
-    expect(channels, ['System', 'Application', 'Security']);
+    expect(channels, const [
+      ChannelInfo(name: 'System', enabled: true, type: 'Admin'),
+      ChannelInfo(name: 'Application', enabled: true, type: 'Admin'),
+      ChannelInfo(name: 'Security', enabled: false, type: 'Admin'),
+    ]);
   });
 
   test('subscribeToEvents', () async {
@@ -47,5 +67,12 @@ void main() {
   test('unsubscribe', () async {
     await platform.unsubscribe('subscription-123');
     // No exception means success
+  });
+
+  test('maps platform exceptions to typed exceptions', () async {
+    expect(
+      () => platform.getChannelInfo('Missing'),
+      throwsA(isA<ChannelNotFoundException>()),
+    );
   });
 }

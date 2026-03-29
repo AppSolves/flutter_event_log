@@ -99,6 +99,14 @@ abstract class EventLogPlatform extends PlatformInterface {
     throw UnimplementedError('getEventStream() has not been implemented.');
   }
 
+  /// Gets the stream of events for a specific subscription.
+  ///
+  /// Platform implementations can override this to route events per
+  /// subscription. The default implementation falls back to the shared stream.
+  Stream<EventRecord> getEventStreamForSubscription(String subscriptionId) {
+    return getEventStream();
+  }
+
   /// Clears all events from the specified channel.
   ///
   /// [channel] is the name of the channel to clear.

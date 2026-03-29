@@ -1,4 +1,5 @@
 #include "event_log_plugin.h"
+#include "event_log_error.h"
 #include "event_log_manager.h"
 
 #include <flutter/method_channel.h>
@@ -11,6 +12,23 @@
 
 namespace event_log
 {
+    namespace
+    {
+        bool TryGetInt64(const flutter::EncodableValue &value, int64_t *output)
+        {
+            if (std::holds_alternative<int32_t>(value))
+            {
+                *output = std::get<int32_t>(value);
+                return true;
+            }
+            if (std::holds_alternative<int64_t>(value))
+            {
+                *output = std::get<int64_t>(value);
+                return true;
+            }
+            return false;
+        }
+    } // namespace
 
     // static
     void EventLogPlugin::RegisterWithRegistrar(
@@ -119,7 +137,12 @@ namespace event_log
                     return;
                 }
 
-                int64_t record_id = std::get<int64_t>(it->second);
+                int64_t record_id = 0;
+                if (!TryGetInt64(it->second, &record_id))
+                {
+                    result->Error("INVALID_ARGUMENT", "eventRecordId must be an integer");
+                    return;
+                }
 
                 const std::string *channel = nullptr;
                 auto channel_it = args->find(flutter::EncodableValue("channel"));
@@ -226,6 +249,10 @@ namespace event_log
             {
                 result->NotImplemented();
             }
+        }
+        catch (const EventLogError &e)
+        {
+            result->Error(e.code(), e.what(), e.details());
         }
         catch (const std::exception &e)
         {

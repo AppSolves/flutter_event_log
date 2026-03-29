@@ -47,6 +47,7 @@ namespace event_log
             std::string id;
             EVT_HANDLE handle;
             std::function<void(flutter::EncodableValue)> callback;
+            EventRenderer *renderer;
             std::thread thread;
             bool active;
             HANDLE stop_event;

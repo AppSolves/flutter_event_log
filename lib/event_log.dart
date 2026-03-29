@@ -52,8 +52,6 @@ export 'src/models/event_record.dart';
 class EventLog {
   EventLog._(); // Private constructor to prevent instantiation
 
-  static final Map<String, StreamSubscription<EventRecord>> _subscriptions = {};
-
   /// Lists all available event log channels on the system.
   ///
   /// Returns a list of [ChannelInfo] objects containing information about
@@ -156,7 +154,9 @@ class EventLog {
       filter,
     );
 
-    final stream = EventLogPlatform.instance.getEventStream();
+    final stream = EventLogPlatform.instance.getEventStreamForSubscription(
+      subscriptionId,
+    );
 
     return EventLogSubscription._(subscriptionId, stream, filter);
   }
@@ -173,7 +173,6 @@ class EventLog {
   /// Throws [EventLogException] if the operation fails.
   static Future<void> unsubscribe(String subscriptionId) async {
     await EventLogPlatform.instance.unsubscribe(subscriptionId);
-    _subscriptions.remove(subscriptionId)?.cancel();
   }
 
   /// Clears all events from the specified channel.
@@ -263,6 +262,7 @@ class EventLogSubscription {
   /// After cancellation, no more events will be received.
   Future<void> cancel() async {
     await _subscription?.cancel();
+    _subscription = null;
     await EventLog.unsubscribe(id);
   }
 }

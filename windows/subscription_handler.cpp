@@ -1,11 +1,42 @@
 #include "subscription_handler.h"
 #include "event_renderer.h"
+#include "event_log_error.h"
 
 #include <sstream>
 #include <chrono>
 
 namespace event_log
 {
+    namespace
+    {
+        flutter::EncodableMap CreateErrorDetails(
+            const std::string &code,
+            const std::string &message,
+            DWORD error_code)
+        {
+            flutter::EncodableMap details;
+            details[flutter::EncodableValue("code")] = flutter::EncodableValue(code);
+            details[flutter::EncodableValue("message")] = flutter::EncodableValue(message);
+            details[flutter::EncodableValue("errorCode")] =
+                flutter::EncodableValue(static_cast<int64_t>(error_code));
+            return details;
+        }
+
+        std::string GetSubscriptionErrorCode(DWORD error_code)
+        {
+            switch (error_code)
+            {
+            case ERROR_ACCESS_DENIED:
+                return "ACCESS_DENIED";
+            case ERROR_EVT_CHANNEL_NOT_FOUND:
+                return "CHANNEL_NOT_FOUND";
+            case ERROR_EVT_INVALID_QUERY:
+                return "INVALID_QUERY";
+            default:
+                return "SUBSCRIPTION_ERROR";
+            }
+        }
+    } // namespace
 
     SubscriptionHandler::SubscriptionHandler(EventRenderer *renderer)
         : renderer_(renderer), next_subscription_id_(1) {}
@@ -26,6 +57,7 @@ namespace event_log
         auto subscription = std::make_unique<Subscription>();
         subscription->id = GenerateSubscriptionId();
         subscription->callback = callback;
+        subscription->renderer = renderer_;
         subscription->active = true;
         subscription->stop_event = CreateEvent(nullptr, TRUE, FALSE, nullptr);
 
@@ -44,7 +76,14 @@ namespace event_log
         {
             DWORD error = GetLastError();
             CloseHandle(subscription->stop_event);
-            throw std::runtime_error("Failed to create subscription: " + std::to_string(error));
+            throw EventLogError(
+                GetSubscriptionErrorCode(error),
+                "Failed to create subscription: " + std::to_string(error),
+                flutter::EncodableValue(
+                    CreateErrorDetails(
+                        GetSubscriptionErrorCode(error),
+                        "Failed to create subscription: " + std::to_string(error),
+                        error)));
         }
 
         std::string id = subscription->id;
@@ -123,9 +162,30 @@ namespace event_log
 
         if (action == EvtSubscribeActionError)
         {
-            // Handle error - event_handle contains error information
-            // Get the actual error code from GetLastError() if needed
-            // DWORD error_code = GetLastError();
+            Subscription *subscription = static_cast<Subscription *>(user_context);
+            if (!subscription || !subscription->active || !subscription->callback)
+            {
+                return 0;
+            }
+
+            DWORD error_code = static_cast<DWORD>(reinterpret_cast<uintptr_t>(event_handle));
+            const auto code = GetSubscriptionErrorCode(error_code);
+            const auto message =
+                "Subscription error: " + std::to_string(error_code);
+
+            flutter::EncodableMap payload;
+            payload[flutter::EncodableValue("subscriptionId")] =
+                flutter::EncodableValue(subscription->id);
+            payload[flutter::EncodableValue("error")] = flutter::EncodableValue(
+                CreateErrorDetails(code, message, error_code));
+
+            try
+            {
+                subscription->callback(flutter::EncodableValue(payload));
+            }
+            catch (...)
+            {
+            }
             return 0;
         }
 
@@ -133,17 +193,19 @@ namespace event_log
         {
             Subscription *subscription = static_cast<Subscription *>(user_context);
 
-            if (subscription && subscription->active && subscription->callback)
+            if (subscription && subscription->active && subscription->callback &&
+                subscription->renderer)
             {
-                // Get the subscription handler's renderer (we need to store it)
-                // For now, create a temporary renderer
-                EventRenderer temp_renderer;
-                auto event_data = temp_renderer.RenderEvent(event_handle);
+                flutter::EncodableMap payload;
+                payload[flutter::EncodableValue("subscriptionId")] =
+                    flutter::EncodableValue(subscription->id);
+                payload[flutter::EncodableValue("event")] =
+                    subscription->renderer->RenderEvent(event_handle);
 
                 // Call the callback with the event data
                 try
                 {
-                    subscription->callback(event_data);
+                    subscription->callback(flutter::EncodableValue(payload));
                 }
                 catch (...)
                 {

@@ -19,8 +19,13 @@ class MethodChannelEventLog extends EventLogPlatform {
   @visibleForTesting
   final eventChannel = const EventChannel('event_log/events');
 
-  /// Broadcast stream controller for events
+  /// Broadcast stream controller for all events.
   StreamController<EventRecord>? _eventStreamController;
+
+  final Map<String, StreamController<EventRecord>> _subscriptionControllers =
+      {};
+
+  int _globalStreamListeners = 0;
 
   /// Subscription to the event channel
   StreamSubscription<dynamic>? _eventChannelSubscription;
@@ -28,13 +33,33 @@ class MethodChannelEventLog extends EventLogPlatform {
   @override
   Stream<EventRecord> getEventStream() {
     _eventStreamController ??= StreamController<EventRecord>.broadcast(
-      onListen: _startListening,
-      onCancel: _stopListening,
+      onListen: () {
+        _globalStreamListeners++;
+        _ensureListening();
+      },
+      onCancel: () {
+        if (_globalStreamListeners > 0) {
+          _globalStreamListeners--;
+        }
+        _stopListeningIfIdle();
+      },
     );
     return _eventStreamController!.stream;
   }
 
-  void _startListening() {
+  @override
+  Stream<EventRecord> getEventStreamForSubscription(String subscriptionId) {
+    return _subscriptionControllers
+        .putIfAbsent(
+          subscriptionId,
+          () => StreamController<EventRecord>.broadcast(
+            onCancel: _stopListeningIfIdle,
+          ),
+        )
+        .stream;
+  }
+
+  void _ensureListening() {
     _eventChannelSubscription ??= eventChannel.receiveBroadcastStream().listen(
       _handleEvent,
       onError: _handleError,
@@ -46,22 +71,55 @@ class MethodChannelEventLog extends EventLogPlatform {
     _eventChannelSubscription = null;
   }
 
+  void _stopListeningIfIdle() {
+    if (_globalStreamListeners > 0 || _subscriptionControllers.isNotEmpty) {
+      return;
+    }
+    _stopListening();
+  }
+
   void _handleEvent(dynamic event) {
-    if (event is Map) {
-      try {
-        final eventRecord = EventRecord.fromMap(
-          Map<String, dynamic>.from(event),
-        );
-        _eventStreamController?.add(eventRecord);
-      } catch (e) {
-        debugPrint('Error parsing event: $e');
+    if (event is! Map) {
+      return;
+    }
+
+    try {
+      final payload = Map<String, dynamic>.from(event);
+      final envelope = _EventEnvelope.fromPayload(payload);
+
+      if (envelope.error != null) {
+        _emitError(envelope.subscriptionId, envelope.error!);
+        return;
       }
+
+      if (envelope.eventRecord == null) {
+        return;
+      }
+
+      if (envelope.subscriptionId case final String subscriptionId) {
+        _subscriptionControllers[subscriptionId]?.add(envelope.eventRecord!);
+      }
+
+      _eventStreamController?.add(envelope.eventRecord!);
+    } catch (e) {
+      debugPrint('Error parsing event: $e');
     }
   }
 
   void _handleError(dynamic error) {
     debugPrint('Event stream error: $error');
-    _eventStreamController?.addError(EventLogException(error.toString()));
+    final exception = EventLogException(error.toString());
+    for (final controller in _subscriptionControllers.values) {
+      controller.addError(exception);
+    }
+    _eventStreamController?.addError(exception);
+  }
+
+  void _emitError(String? subscriptionId, EventLogException error) {
+    if (subscriptionId != null) {
+      _subscriptionControllers[subscriptionId]?.addError(error);
+    }
+    _eventStreamController?.addError(error);
   }
 
   @override
@@ -127,6 +185,14 @@ class MethodChannelEventLog extends EventLogPlatform {
         throw const SubscriptionException('Failed to create subscription');
       }
 
+      _subscriptionControllers.putIfAbsent(
+        result,
+        () => StreamController<EventRecord>.broadcast(
+          onCancel: _stopListeningIfIdle,
+        ),
+      );
+      _ensureListening();
+
       return result;
     } on PlatformException catch (e) {
       throw _handlePlatformException(e);
@@ -139,6 +205,8 @@ class MethodChannelEventLog extends EventLogPlatform {
       await methodChannel.invokeMethod<void>('unsubscribe', {
         'subscriptionId': subscriptionId,
       });
+      await _subscriptionControllers.remove(subscriptionId)?.close();
+      _stopListeningIfIdle();
     } on PlatformException catch (e) {
       throw _handlePlatformException(e);
     }
@@ -179,7 +247,7 @@ class MethodChannelEventLog extends EventLogPlatform {
       case 'ACCESS_DENIED':
         return AccessDeniedException(message, _parseErrorCode(e.details));
       case 'CHANNEL_NOT_FOUND':
-        return ChannelNotFoundException(message);
+        return ChannelNotFoundException(_parseChannelName(e.details, message));
       case 'INVALID_QUERY':
         return InvalidQueryException(message);
       case 'EVENT_NOT_FOUND':
@@ -205,5 +273,76 @@ class MethodChannelEventLog extends EventLogPlatform {
       return details['eventRecordId'] as int;
     }
     return 0;
+  }
+
+  String _parseChannelName(dynamic details, String fallback) {
+    if (details is Map && details['channel'] is String) {
+      return details['channel'] as String;
+    }
+    return fallback;
+  }
+}
+
+class _EventEnvelope {
+  const _EventEnvelope({this.subscriptionId, this.eventRecord, this.error});
+
+  factory _EventEnvelope.fromPayload(Map<String, dynamic> payload) {
+    if (payload.containsKey('event') || payload.containsKey('error')) {
+      final subscriptionId = payload['subscriptionId'] as String?;
+      final eventPayload = payload['event'];
+      final errorPayload = payload['error'];
+
+      return _EventEnvelope(
+        subscriptionId: subscriptionId,
+        eventRecord: eventPayload is Map
+            ? EventRecord.fromMap(Map<String, dynamic>.from(eventPayload))
+            : null,
+        error: errorPayload is Map
+            ? _eventLogExceptionFromDetails(
+                Map<String, dynamic>.from(errorPayload),
+              )
+            : null,
+      );
+    }
+
+    return _EventEnvelope(eventRecord: EventRecord.fromMap(payload));
+  }
+
+  final String? subscriptionId;
+  final EventRecord? eventRecord;
+  final EventLogException? error;
+
+  static EventLogException _eventLogExceptionFromDetails(
+    Map<String, dynamic> payload,
+  ) {
+    final code = (payload['code'] as String?) ?? 'EXCEPTION';
+    final message = (payload['message'] as String?) ?? 'Unknown error';
+
+    switch (code) {
+      case 'ACCESS_DENIED':
+        return AccessDeniedException(message, _parseErrorCode(payload));
+      case 'CHANNEL_NOT_FOUND':
+        return ChannelNotFoundException(
+          (payload['channel'] as String?) ?? message,
+        );
+      case 'INVALID_QUERY':
+        return InvalidQueryException(message);
+      case 'EVENT_NOT_FOUND':
+        return EventNotFoundException(_parseEventId(payload));
+      case 'SUBSCRIPTION_ERROR':
+        return SubscriptionException(message, _parseErrorCode(payload));
+      default:
+        return EventLogException(message, _parseErrorCode(payload));
+    }
+  }
+
+  static int? _parseErrorCode(Map<String, dynamic> payload) {
+    final errorCode = payload['errorCode'];
+    return errorCode is int ? errorCode : null;
+  }
+
+  static int _parseEventId(Map<String, dynamic> payload) {
+    final eventRecordId = payload['eventRecordId'];
+    return eventRecordId is int ? eventRecordId : 0;
   }
 }

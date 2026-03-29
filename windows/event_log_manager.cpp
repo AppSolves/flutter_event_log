@@ -1,13 +1,65 @@
 #include "event_log_manager.h"
+#include "event_log_error.h"
 #include "event_renderer.h"
 #include "subscription_handler.h"
 
 #include <sstream>
 #include <algorithm>
 #include <stdexcept>
+#include <optional>
 
 namespace event_log
 {
+    namespace
+    {
+        std::optional<int64_t> GetIntValue(const flutter::EncodableValue &value)
+        {
+            if (std::holds_alternative<int32_t>(value))
+            {
+                return std::get<int32_t>(value);
+            }
+            if (std::holds_alternative<int64_t>(value))
+            {
+                return std::get<int64_t>(value);
+            }
+            return std::nullopt;
+        }
+
+        flutter::EncodableMap CreateErrorDetails(
+            DWORD error_code,
+            flutter::EncodableMap extra = {})
+        {
+            extra[flutter::EncodableValue("errorCode")] =
+                flutter::EncodableValue(static_cast<int64_t>(error_code));
+            return extra;
+        }
+
+        std::string GetChannelErrorCode(DWORD error_code)
+        {
+            switch (error_code)
+            {
+            case ERROR_ACCESS_DENIED:
+                return "ACCESS_DENIED";
+            case ERROR_EVT_CHANNEL_NOT_FOUND:
+                return "CHANNEL_NOT_FOUND";
+            case ERROR_EVT_INVALID_QUERY:
+                return "INVALID_QUERY";
+            default:
+                return "EXCEPTION";
+            }
+        }
+
+        [[noreturn]] void ThrowEventLogError(
+            const std::string &code,
+            const std::string &message,
+            flutter::EncodableMap details = {})
+        {
+            throw EventLogError(
+                code,
+                message,
+                flutter::EncodableValue(std::move(details)));
+        }
+    } // namespace
 
     EventLogManager::EventLogManager()
         : renderer_(std::make_unique<EventRenderer>()),
@@ -23,21 +75,51 @@ namespace event_log
         EVT_HANDLE channel_enum = EvtOpenChannelEnum(nullptr, 0);
         if (!channel_enum)
         {
-            throw std::runtime_error("Failed to enumerate channels: " + GetErrorMessage(GetLastError()));
+            const DWORD error = GetLastError();
+            ThrowEventLogError(
+                GetChannelErrorCode(error),
+                "Failed to enumerate channels: " + GetErrorMessage(error),
+                CreateErrorDetails(error));
         }
 
-        WCHAR channel_name[256];
-        DWORD buffer_used = 0;
+        std::vector<WCHAR> channel_name(256);
+        DWORD buffer_used = static_cast<DWORD>(channel_name.size());
 
-        while (EvtNextChannelPath(channel_enum, 256, channel_name, &buffer_used))
+        while (true)
         {
-            flutter::EncodableMap channel_info;
+            if (!EvtNextChannelPath(
+                    channel_enum,
+                    static_cast<DWORD>(channel_name.size()),
+                    channel_name.data(),
+                    &buffer_used))
+            {
+                const DWORD error = GetLastError();
+                if (error == ERROR_NO_MORE_ITEMS)
+                {
+                    break;
+                }
+                if (error == ERROR_INSUFFICIENT_BUFFER)
+                {
+                    channel_name.resize(buffer_used);
+                    continue;
+                }
 
-            std::string name = renderer_->WideToUtf8(channel_name);
+                EvtClose(channel_enum);
+                ThrowEventLogError(
+                    "EXCEPTION",
+                    "Failed to enumerate channels: " + GetErrorMessage(error),
+                    CreateErrorDetails(error));
+            }
+
+            flutter::EncodableMap channel_info;
+            channel_info[flutter::EncodableValue("enabled")] =
+                flutter::EncodableValue(false);
+
+            std::string name = renderer_->WideToUtf8(channel_name.data());
             channel_info[flutter::EncodableValue("name")] = flutter::EncodableValue(name);
 
             // Get channel configuration
-            EVT_HANDLE config = EvtOpenChannelConfig(nullptr, channel_name, 0);
+            EVT_HANDLE config = EvtOpenChannelConfig(nullptr, channel_name.data(), 0);
             if (config)
             {
                 DWORD buffer_used_config = 0;
@@ -59,6 +141,7 @@ namespace event_log
             }
 
             channels.push_back(flutter::EncodableValue(channel_info));
+            buffer_used = static_cast<DWORD>(channel_name.size());
         }
 
         EvtClose(channel_enum);
@@ -95,15 +178,29 @@ namespace event_log
         EVT_HANDLE query_handle = EvtQuery(nullptr, channel.c_str(), query.c_str(), flags);
         if (!query_handle)
         {
-            throw std::runtime_error("Failed to query events: " + GetErrorMessage(GetLastError()));
+            const DWORD error = GetLastError();
+            flutter::EncodableMap details;
+            auto channel_utf8 = renderer_->WideToUtf8(channel);
+            if (!channel_utf8.empty() && channel_utf8 != "*")
+            {
+                details[flutter::EncodableValue("channel")] =
+                    flutter::EncodableValue(channel_utf8);
+            }
+            ThrowEventLogError(
+                GetChannelErrorCode(error),
+                "Failed to query events: " + GetErrorMessage(error),
+                CreateErrorDetails(error, std::move(details)));
         }
 
         // Get max events limit
         int max_events = 1000; // Default
         auto max_it = filter.find(flutter::EncodableValue("maxEvents"));
-        if (max_it != filter.end() && std::holds_alternative<int>(max_it->second))
+        if (max_it != filter.end())
         {
-            max_events = std::get<int>(max_it->second);
+            if (auto max_value = GetIntValue(max_it->second))
+            {
+                max_events = static_cast<int>(*max_value);
+            }
         }
 
         // Retrieve events
@@ -153,6 +250,21 @@ namespace event_log
 
         if (!query_handle)
         {
+            const DWORD error = GetLastError();
+            if (error == ERROR_EVT_CHANNEL_NOT_FOUND)
+            {
+                flutter::EncodableMap details;
+                if (channel)
+                {
+                    details[flutter::EncodableValue("channel")] =
+                        flutter::EncodableValue(*channel);
+                }
+                ThrowEventLogError(
+                    "CHANNEL_NOT_FOUND",
+                    "Failed to query event by record ID: " + GetErrorMessage(error),
+                    CreateErrorDetails(error, std::move(details)));
+            }
+
             return flutter::EncodableValue(); // null
         }
 
@@ -212,7 +324,13 @@ namespace event_log
         if (!EvtClearLog(nullptr, channel_wide.c_str(), backup, 0))
         {
             DWORD error = GetLastError();
-            throw std::runtime_error("Failed to clear channel: " + GetErrorMessage(error));
+            flutter::EncodableMap details;
+            details[flutter::EncodableValue("channel")] =
+                flutter::EncodableValue(channel);
+            ThrowEventLogError(
+                GetChannelErrorCode(error),
+                "Failed to clear channel: " + GetErrorMessage(error),
+                CreateErrorDetails(error, std::move(details)));
         }
     }
 
@@ -230,6 +348,7 @@ namespace event_log
 
         flutter::EncodableMap info;
         info[flutter::EncodableValue("name")] = flutter::EncodableValue(channel_name);
+        info[flutter::EncodableValue("enabled")] = flutter::EncodableValue(false);
 
         EVT_VARIANT property_value;
         DWORD buffer_used = 0;
@@ -314,20 +433,33 @@ namespace event_log
                 std::wostringstream oss;
                 if (ids.size() == 1)
                 {
-                    oss << L"EventID=" << std::get<int>(ids[0]);
+                    if (auto event_id = GetIntValue(ids[0]))
+                    {
+                        oss << L"EventID=" << *event_id;
+                    }
                 }
                 else
                 {
                     oss << L"(";
+                    bool first = true;
                     for (size_t i = 0; i < ids.size(); i++)
                     {
-                        if (i > 0)
+                        auto event_id = GetIntValue(ids[i]);
+                        if (!event_id)
+                        {
+                            continue;
+                        }
+                        if (!first)
                             oss << L" or ";
-                        oss << L"EventID=" << std::get<int>(ids[i]);
+                        oss << L"EventID=" << *event_id;
+                        first = false;
                     }
                     oss << L")";
                 }
-                conditions.push_back(oss.str());
+                if (!oss.str().empty() && oss.str() != L"()")
+                {
+                    conditions.push_back(oss.str());
+                }
             }
         }
 
@@ -342,20 +474,33 @@ namespace event_log
                 std::wostringstream oss;
                 if (levels.size() == 1)
                 {
-                    oss << L"Level=" << std::get<int>(levels[0]);
+                    if (auto level = GetIntValue(levels[0]))
+                    {
+                        oss << L"Level=" << *level;
+                    }
                 }
                 else
                 {
                     oss << L"(";
+                    bool first = true;
                     for (size_t i = 0; i < levels.size(); i++)
                     {
-                        if (i > 0)
+                        auto level = GetIntValue(levels[i]);
+                        if (!level)
+                        {
+                            continue;
+                        }
+                        if (!first)
                             oss << L" or ";
-                        oss << L"Level=" << std::get<int>(levels[i]);
+                        oss << L"Level=" << *level;
+                        first = false;
                     }
                     oss << L")";
                 }
-                conditions.push_back(oss.str());
+                if (!oss.str().empty() && oss.str() != L"()")
+                {
+                    conditions.push_back(oss.str());
+                }
             }
         }
 
@@ -420,6 +565,18 @@ namespace event_log
 
             oss << L"]";
             conditions.push_back(oss.str());
+        }
+
+        // Keywords
+        auto keywords_it = filter.find(flutter::EncodableValue("keywords"));
+        if (keywords_it != filter.end())
+        {
+            if (auto keywords = GetIntValue(keywords_it->second))
+            {
+                std::wostringstream oss;
+                oss << L"band(Keywords," << *keywords << L")";
+                conditions.push_back(oss.str());
+            }
         }
 
         // Build final query

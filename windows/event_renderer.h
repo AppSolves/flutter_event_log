@@ -32,7 +32,9 @@ namespace event_log
         std::string RenderEventAsXml(EVT_HANDLE event_handle);
 
         // Gets the message text for an event
-        std::string GetEventMessage(EVT_HANDLE event_handle);
+        std::string GetEventMessage(
+            EVT_HANDLE event_handle,
+            const std::string &provider_name);
 
         // Converts wide string to UTF-8
         std::string WideToUtf8(const std::wstring &wide);
