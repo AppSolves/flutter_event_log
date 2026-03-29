@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:event_log/event_log.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -36,6 +35,20 @@ class _EventLogDemoState extends State<EventLogDemo> {
   bool _isLoading = false;
   String _status = 'Ready';
   final List<EventRecord> _liveEvents = [];
+
+  ChannelInfo? get _selectedChannelInfo {
+    for (final channel in _channels) {
+      if (channel.name == _selectedChannel) {
+        return channel;
+      }
+    }
+    return null;
+  }
+
+  bool get _selectedChannelSupportsLive {
+    final type = _selectedChannelInfo?.type;
+    return type != 'Analytic' && type != 'Debug';
+  }
 
   @override
   void initState() {
@@ -90,7 +103,7 @@ class _EventLogDemoState extends State<EventLogDemo> {
       });
     } catch (e) {
       setState(() {
-        _status = 'Error querying events: $e';
+        _status = _describeError(e, fallback: 'Error querying events');
       });
     } finally {
       setState(() => _isLoading = false);
@@ -118,7 +131,7 @@ class _EventLogDemoState extends State<EventLogDemo> {
       });
     } catch (e) {
       setState(() {
-        _status = 'Error querying events: $e';
+        _status = _describeError(e, fallback: 'Error querying error events');
       });
     } finally {
       setState(() => _isLoading = false);
@@ -145,7 +158,7 @@ class _EventLogDemoState extends State<EventLogDemo> {
         },
         onError: (error) {
           setState(() {
-            _status = 'Subscription error: $error';
+            _status = _describeError(error, fallback: 'Subscription error');
           });
         },
       );
@@ -156,7 +169,7 @@ class _EventLogDemoState extends State<EventLogDemo> {
       });
     } catch (e) {
       setState(() {
-        _status = 'Error starting subscription: $e';
+        _status = _describeError(e, fallback: 'Error starting subscription');
       });
     }
   }
@@ -227,6 +240,26 @@ class _EventLogDemoState extends State<EventLogDemo> {
               ],
             ),
             const SizedBox(height: 12),
+            if (_selectedChannelInfo != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      label: Text(_selectedChannelInfo!.type ?? 'Unknown Type'),
+                    ),
+                    Chip(
+                      label: Text(
+                        _selectedChannelInfo!.enabled ? 'Enabled' : 'Disabled',
+                      ),
+                    ),
+                    if (!_selectedChannelSupportsLive)
+                      const Chip(label: Text('Live monitoring unavailable')),
+                  ],
+                ),
+              ),
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -248,13 +281,19 @@ class _EventLogDemoState extends State<EventLogDemo> {
                 ),
                 ElevatedButton.icon(
                   onPressed: _subscription == null
-                      ? _startLiveMonitoring
+                      ? (_selectedChannelSupportsLive
+                            ? _startLiveMonitoring
+                            : null)
                       : _stopLiveMonitoring,
                   icon: Icon(
                     _subscription == null ? Icons.play_arrow : Icons.stop,
                   ),
                   label: Text(
-                    _subscription == null ? 'Start Live' : 'Stop Live',
+                    _subscription == null
+                        ? (_selectedChannelSupportsLive
+                              ? 'Start Live'
+                              : 'Live Unsupported')
+                        : 'Stop Live',
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _subscription == null
@@ -272,9 +311,6 @@ class _EventLogDemoState extends State<EventLogDemo> {
   }
 
   Widget _buildStatusBar() {
-    if (kDebugMode) {
-      print('Status updated: $_status');
-    }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.grey[200],
@@ -312,6 +348,31 @@ class _EventLogDemoState extends State<EventLogDemo> {
         ],
       ),
     );
+  }
+
+  String _describeError(Object error, {required String fallback}) {
+    if (error case UnsupportedChannelException(
+      :final channel,
+      :final operation,
+    )) {
+      if (operation == 'subscribe') {
+        return '$channel does not support live monitoring.';
+      }
+      if (operation == 'query') {
+        return '$channel does not support event queries.';
+      }
+      return '$channel does not support this operation.';
+    }
+
+    if (error case ChannelNotFoundException()) {
+      return fallback;
+    }
+
+    if (error case EventLogException(:final message)) {
+      return '$fallback: $message';
+    }
+
+    return '$fallback: $error';
   }
 
   Widget _buildContent() {

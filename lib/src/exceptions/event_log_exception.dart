@@ -31,6 +31,24 @@ class ChannelNotFoundException extends EventLogException {
     : super('Channel not found: $channel');
 }
 
+/// Exception thrown when a channel does not support the requested operation.
+class UnsupportedChannelException extends EventLogException {
+  /// Creates an [UnsupportedChannelException].
+  UnsupportedChannelException(this.channel, {this.operation, int? code})
+    : super(
+        operation == null || operation.isEmpty
+            ? 'Channel does not support this operation: $channel'
+            : 'Channel does not support $operation: $channel',
+        code,
+      );
+
+  /// The channel that rejected the operation.
+  final String channel;
+
+  /// The unsupported operation, such as `query` or `subscribe`.
+  final String? operation;
+}
+
 /// Exception thrown when an invalid query is provided.
 class InvalidQueryException extends EventLogException {
   /// Creates an [InvalidQueryException].

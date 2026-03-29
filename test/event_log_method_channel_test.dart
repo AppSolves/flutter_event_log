@@ -32,6 +32,17 @@ void main() {
                   details: {'channel': 'Missing'},
                 );
               }
+              if (arguments?['channelName'] == 'Unsupported') {
+                throw PlatformException(
+                  code: 'UNSUPPORTED_CHANNEL',
+                  message: 'This channel does not support event queries.',
+                  details: {
+                    'channel': 'Unsupported',
+                    'operation': 'query',
+                    'errorCode': 50,
+                  },
+                );
+              }
               return {'name': 'System', 'enabled': true, 'type': 'Admin'};
             case 'subscribeToEvents':
               return 'subscription-123';
@@ -73,6 +84,10 @@ void main() {
     expect(
       () => platform.getChannelInfo('Missing'),
       throwsA(isA<ChannelNotFoundException>()),
+    );
+    expect(
+      () => platform.getChannelInfo('Unsupported'),
+      throwsA(isA<UnsupportedChannelException>()),
     );
   });
 }

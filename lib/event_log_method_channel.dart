@@ -102,22 +102,26 @@ class MethodChannelEventLog extends EventLogPlatform {
 
       _eventStreamController?.add(envelope.eventRecord!);
     } catch (e) {
-      debugPrint('Error parsing event: $e');
+      _dispatchStreamError(
+        EventLogException('Failed to parse event payload: $e'),
+      );
     }
   }
 
   void _handleError(dynamic error) {
-    debugPrint('Event stream error: $error');
-    final exception = EventLogException(error.toString());
-    for (final controller in _subscriptionControllers.values) {
-      controller.addError(exception);
-    }
-    _eventStreamController?.addError(exception);
+    _dispatchStreamError(EventLogException(error.toString()));
   }
 
   void _emitError(String? subscriptionId, EventLogException error) {
     if (subscriptionId != null) {
       _subscriptionControllers[subscriptionId]?.addError(error);
+    }
+    _eventStreamController?.addError(error);
+  }
+
+  void _dispatchStreamError(EventLogException error) {
+    for (final controller in _subscriptionControllers.values) {
+      controller.addError(error);
     }
     _eventStreamController?.addError(error);
   }
@@ -248,6 +252,13 @@ class MethodChannelEventLog extends EventLogPlatform {
         return AccessDeniedException(message, _parseErrorCode(e.details));
       case 'CHANNEL_NOT_FOUND':
         return ChannelNotFoundException(_parseChannelName(e.details, message));
+      case 'UNSUPPORTED_CHANNEL':
+      case 'NOT_SUPPORTED':
+        return UnsupportedChannelException(
+          _parseChannelName(e.details, 'Unknown channel'),
+          operation: _parseOperation(e.details),
+          code: _parseErrorCode(e.details),
+        );
       case 'INVALID_QUERY':
         return InvalidQueryException(message);
       case 'EVENT_NOT_FOUND':
@@ -280,6 +291,13 @@ class MethodChannelEventLog extends EventLogPlatform {
       return details['channel'] as String;
     }
     return fallback;
+  }
+
+  String? _parseOperation(dynamic details) {
+    if (details is Map && details['operation'] is String) {
+      return details['operation'] as String;
+    }
+    return null;
   }
 }
 
@@ -324,6 +342,13 @@ class _EventEnvelope {
       case 'CHANNEL_NOT_FOUND':
         return ChannelNotFoundException(
           (payload['channel'] as String?) ?? message,
+        );
+      case 'UNSUPPORTED_CHANNEL':
+      case 'NOT_SUPPORTED':
+        return UnsupportedChannelException(
+          (payload['channel'] as String?) ?? 'Unknown channel',
+          operation: payload['operation'] as String?,
+          code: _parseErrorCode(payload),
         );
       case 'INVALID_QUERY':
         return InvalidQueryException(message);

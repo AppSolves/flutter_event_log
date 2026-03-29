@@ -47,7 +47,11 @@ class EventFilter {
   /// Maximum number of events to retrieve
   final int? maxEvents;
 
-  /// Whether to retrieve events in reverse chronological order
+  /// Whether to retrieve events in reverse chronological order.
+  ///
+  /// For Admin and Operational channels, the native query runs newest-first.
+  /// For Analytic and Debug channels, Windows only allows forward reads, so
+  /// the plugin emulates reverse order in memory instead of throwing.
   final bool reverse;
 
   /// Creates a copy with the specified fields replaced.

@@ -13,7 +13,7 @@
 
 <p align="center">
   <strong>A comprehensive Flutter plugin for accessing the Windows Event Log (Event Viewer)</strong><br>
-  Monitor system events in real-time, query historical events, and manage event subscriptions with full support for all Windows Event Log channels.
+  Monitor system events in real-time, query historical events, and manage event subscriptions across Windows Event Log channels with native Win32 integration.
 </p>
 
 ## 📸 Demo
@@ -130,6 +130,11 @@ for (final event in events) {
   print('${event.timeCreated}: Event ${event.eventId} - ${event.level}');
 }
 ```
+
+For Analytic and Debug channels, Windows does not allow reverse-native reads.
+If you set `reverse: true`, the plugin automatically queries forward and
+reorders the results in memory so your Dart code still receives newest-first
+events.
 
 ### 🎯 Filter Events by Level
 
@@ -304,10 +309,20 @@ try {
   print('Channel not found: ${e.message}');
 } on InvalidQueryException catch (e) {
   print('Invalid query: ${e.message}');
+} on UnsupportedChannelException catch (e) {
+  print('Unsupported channel operation: ${e.message}');
 } on EventLogException catch (e) {
   print('Event log error: ${e.message}');
 }
 ```
+
+`UnsupportedChannelException` is raised when Windows rejects the requested
+operation for that channel, such as attempting a live subscription on an
+Analytic or Debug log.
+
+Live subscriptions are supported for Admin and Operational channels. Analytic
+and Debug channels are the specific channel types that do not support live
+subscriptions through the Windows Event Log subscription API.
 
 ---
 
@@ -325,6 +340,8 @@ try {
 - **Security channel** - Often requires administrator privileges
 - **Clear channel** - Requires administrator privileges
 - **Some subscriptions** - May require elevated privileges depending on the channel
+- **Live subscriptions** - Supported for Admin and Operational channels
+- **Analytic and Debug channels** - Historical queries are forward-only at the Windows API layer. The plugin transparently emulates `reverse: true` for queries, but live subscriptions are not supported by the Windows Event Log subscription API and will throw `UnsupportedChannelException`
 
 ## 💻 Example App
 
@@ -343,6 +360,20 @@ flutter run -d windows
 - ✅ **Live Monitoring** - Subscribe to real-time events with visual indicators
 - ✅ **Event Details** - Expandable cards showing all event properties
 - ✅ **Material Design 3** - Beautiful, modern UI
+
+## 🛠️ Development
+
+Install the repository-managed Git hooks to auto-format staged Dart and C/C++
+files before each commit:
+
+```powershell
+pwsh -File tool/install-git-hooks.ps1
+```
+
+The pre-commit hook runs:
+
+- `dart format` for staged `.dart` files
+- `clang-format -i` for staged C/C++ source and header files
 
 ## 🏗️ Architecture
 

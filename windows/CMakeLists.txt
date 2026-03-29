@@ -14,6 +14,7 @@ set(PLUGIN_NAME "event_log_plugin")
 # Define the plugin library target. Its name must not be changed (see comment
 # on PLUGIN_NAME above).
 add_library(${PLUGIN_NAME} SHARED
+  "encodable_sanitizer.cpp"
   "event_log_plugin.cpp"
   "event_log_manager.cpp"
   "event_renderer.cpp"

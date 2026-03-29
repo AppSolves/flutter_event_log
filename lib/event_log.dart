@@ -94,6 +94,11 @@ class EventLog {
   ///
   /// Returns a list of [EventRecord] objects matching the filter criteria.
   ///
+  /// If [EventFilter.reverse] is `true` for an Analytic or Debug channel,
+  /// Windows cannot execute the query in reverse order natively. In that case
+  /// the plugin performs a forward query and reorders the returned events in
+  /// memory so callers still receive newest-first results.
+  ///
   /// Throws [EventLogException] if the query fails.
   static Future<List<EventRecord>> query(EventFilter filter) {
     return EventLogPlatform.instance.queryEvents(filter);
@@ -147,6 +152,10 @@ class EventLog {
   /// // Later: cancel the subscription
   /// await EventLog.unsubscribe(subscriptionId);
   /// ```
+  ///
+  /// Windows only supports live subscriptions for Admin and Operational
+  /// channels. Subscribing to Analytic or Debug channels throws an
+  /// [UnsupportedChannelException].
   ///
   /// Throws [SubscriptionException] if the subscription fails.
   static Future<EventLogSubscription> subscribe(EventFilter filter) async {
