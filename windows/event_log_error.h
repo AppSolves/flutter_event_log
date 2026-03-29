@@ -10,33 +10,30 @@
 namespace event_log
 {
 
-    class EventLogError : public std::runtime_error
+class EventLogError : public std::runtime_error
+{
+  public:
+    EventLogError(std::string code, std::string message,
+                  flutter::EncodableValue details = flutter::EncodableValue())
+        : std::runtime_error(std::move(message)), code_(std::move(code)),
+          details_(std::move(details))
     {
-    public:
-        EventLogError(
-            std::string code,
-            std::string message,
-            flutter::EncodableValue details = flutter::EncodableValue())
-            : std::runtime_error(std::move(message)),
-              code_(std::move(code)),
-              details_(std::move(details))
-        {
-        }
+    }
 
-        const std::string &code() const
-        {
-            return code_;
-        }
+    const std::string &code() const
+    {
+        return code_;
+    }
 
-        const flutter::EncodableValue &details() const
-        {
-            return details_;
-        }
+    const flutter::EncodableValue &details() const
+    {
+        return details_;
+    }
 
-    private:
-        std::string code_;
-        flutter::EncodableValue details_;
-    };
+  private:
+    std::string code_;
+    flutter::EncodableValue details_;
+};
 
 } // namespace event_log
 

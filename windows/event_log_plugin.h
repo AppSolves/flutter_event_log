@@ -12,41 +12,39 @@
 namespace event_log
 {
 
-    class EventLogManager;
+class EventLogManager;
 
-    class EventLogPlugin : public flutter::Plugin
-    {
-    public:
-        static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
+class EventLogPlugin : public flutter::Plugin
+{
+  public:
+    static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
 
-        EventLogPlugin(
-            flutter::PluginRegistrarWindows *registrar,
-            std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> method_channel,
-            std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> event_channel);
+    EventLogPlugin(flutter::PluginRegistrarWindows *registrar,
+                   std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> method_channel,
+                   std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> event_channel);
 
-        virtual ~EventLogPlugin();
+    virtual ~EventLogPlugin();
 
-        // Disallow copy and assign.
-        EventLogPlugin(const EventLogPlugin &) = delete;
-        EventLogPlugin &operator=(const EventLogPlugin &) = delete;
+    // Disallow copy and assign.
+    EventLogPlugin(const EventLogPlugin &) = delete;
+    EventLogPlugin &operator=(const EventLogPlugin &) = delete;
 
-    private:
-        // Handles method calls from Dart.
-        void HandleMethodCall(
-            const flutter::MethodCall<flutter::EncodableValue> &method_call,
-            std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+  private:
+    // Handles method calls from Dart.
+    void HandleMethodCall(const flutter::MethodCall<flutter::EncodableValue> &method_call,
+                          std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
-        // Sends an event to the Dart side via the event channel
-        void SendEvent(const flutter::EncodableValue &event);
+    // Sends an event to the Dart side via the event channel
+    void SendEvent(const flutter::EncodableValue &event);
 
-        flutter::PluginRegistrarWindows *registrar_;
-        std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> method_channel_;
-        std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> event_channel_;
-        std::unique_ptr<EventLogManager> manager_;
+    flutter::PluginRegistrarWindows *registrar_;
+    std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> method_channel_;
+    std::unique_ptr<flutter::EventChannel<flutter::EncodableValue>> event_channel_;
+    std::unique_ptr<EventLogManager> manager_;
 
-        std::mutex event_sink_mutex_;
-        std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> event_sink_;
-    };
+    std::mutex event_sink_mutex_;
+    std::unique_ptr<flutter::EventSink<flutter::EncodableValue>> event_sink_;
+};
 
 } // namespace event_log
 

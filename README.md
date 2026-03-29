@@ -367,13 +367,19 @@ Install the repository-managed Git hooks to auto-format staged Dart and C/C++
 files before each commit:
 
 ```powershell
-pwsh -File tool/install-git-hooks.ps1
+pwsh -File scripts/install-git-hooks.ps1
 ```
 
 The pre-commit hook runs:
 
 - `dart format` for staged `.dart` files
 - `clang-format -i` for staged C/C++ source and header files
+
+To format every tracked Dart and C/C++ file in the repository once:
+
+```powershell
+pwsh -File scripts/format_all.ps1
+```
 
 ## 🏗️ Architecture
 
