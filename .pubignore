@@ -1,0 +1,12 @@
+.clang-format
+.githooks/
+.github/
+assets/github/
+build/
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+SECURITY.md
+event_log.iml
+scripts/
+tools/
+windows/test/

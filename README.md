@@ -1,7 +1,7 @@
 # event_log
 
 <p align="center">
-  <kbd> <img src="./assets/github/readme.png" alt="Event Log Plugin Demo" width="100%" height="auto" min-height="50vw"> </kbd>
+  <kbd> <img src="https://raw.githubusercontent.com/AppSolves/flutter_event_log/main/assets/github/readme.png" alt="Event Log Plugin Demo" width="100%" height="auto" min-height="50vw"> </kbd>
 </p>
 <br>
 <p align="center">
