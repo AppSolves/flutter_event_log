@@ -72,23 +72,26 @@ jobs:
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
+        env:
+          PACKAGE_NAME: event_log
+          PUB_PACKAGE_URL: https://pub.dev/packages
         with:
           generate_release_notes: true
           append_body: true
           body: |
-            Published version [**${{ github.ref_name }}**](https://pub.dev/packages/event_log/versions/${{ steps.release_metadata.outputs.package_version }}) to `pub.dev` [here](https://pub.dev/packages/event_log).
+            Published version [**${{ github.ref_name }}**](${{ env.PUB_PACKAGE_URL }}/${{ env.PACKAGE_NAME }}/versions/${{ steps.release_metadata.outputs.package_version }}) to `pub.dev` [here](${{ env.PUB_PACKAGE_URL }}/${{ env.PACKAGE_NAME }}).
 
             ## Installation
 
             Run the following command to add the package to your project:
 
             ```bash
-            flutter pub add event_log
+            flutter pub add ${{ env.PACKAGE_NAME }}
             ```
 
             or add the following to your `pubspec.yaml`:
 
             ```yaml
             dependencies:
-              event_log: ^${{ steps.release_metadata.outputs.package_version }}
+              ${{ env.PACKAGE_NAME }}: ^${{ steps.release_metadata.outputs.package_version }}
             ```
