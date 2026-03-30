@@ -76,7 +76,7 @@ jobs:
           generate_release_notes: true
           append_body: true
           body: |
-            Published version **${{ github.ref_name }}** to `pub.dev` [here](https://pub.dev/packages/event_log).
+            Published version [**${{ github.ref_name }}**](https://pub.dev/packages/event_log/versions/${{ steps.release_metadata.outputs.package_version }}) to `pub.dev` [here](https://pub.dev/packages/event_log).
 
             ## Installation
 
