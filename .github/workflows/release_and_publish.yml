@@ -1,0 +1,94 @@
+name: Release And Publish
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+jobs:
+  run-quality-checks:
+    name: Run Quality Checks
+    uses: ./.github/workflows/quality_checks.yml
+
+  validate-release-package:
+    name: Validate Release Package
+    needs:
+      - run-quality-checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Package Dependencies
+        run: flutter pub get
+
+      - name: Verify Tag Matches Package Version
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PACKAGE_VERSION="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          if [ "$TAG_VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match pubspec version ($PACKAGE_VERSION)."
+            exit 1
+          fi
+
+      - name: Verify Publish Contents
+        run: dart pub publish --dry-run
+
+  publish-to-pub-dev:
+    name: Publish Package To pub.dev
+    needs:
+      - validate-release-package
+    permissions:
+      id-token: write
+    uses: dart-lang/setup-dart/.github/workflows/publish.yml@main
+
+  create-github-release:
+    name: Create GitHub Release
+    needs:
+      - publish-to-pub-dev
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Prepare Release Metadata
+        id: release_metadata
+        shell: bash
+        run: |
+          echo "package_version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          append_body: true
+          body: |
+            Published version **${{ github.ref_name }}** to `pub.dev` [here](https://pub.dev/packages/event_log).
+
+            ## Installation
+
+            Run the following command to add the package to your project:
+
+            ```bash
+            flutter pub add event_log
+            ```
+
+            or add the following to your `pubspec.yaml`:
+
+            ```yaml
+            dependencies:
+              event_log: ^${{ steps.release_metadata.outputs.package_version }}
+            ```

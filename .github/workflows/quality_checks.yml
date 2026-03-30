@@ -1,0 +1,73 @@
+name: Quality Checks
+
+on:
+  push:
+    paths:
+      - "**/*.dart"
+      - "**/*.c"
+      - "**/*.cc"
+      - "**/*.cpp"
+      - "**/*.cxx"
+      - "**/*.h"
+      - "**/*.hh"
+      - "**/*.hpp"
+      - "**/*.hxx"
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-analysis-and-tests:
+    name: Package Analysis And Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v6
+
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Package Dependencies
+        run: flutter pub get
+
+      - name: Analyze Package
+        run: flutter analyze
+
+      - name: Run Package Tests
+        run: flutter test
+
+  windows-example-validation:
+    name: Windows Example Validation
+    runs-on: windows-latest
+
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v6
+
+      - name: Set Up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Example Dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Analyze Example App
+        working-directory: example
+        run: flutter analyze
+
+      - name: Build Example App For Windows
+        working-directory: example
+        run: flutter build windows
+
+      - name: Run Windows Integration Tests
+        working-directory: example
+        run: flutter test integration_test -d windows
