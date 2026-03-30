@@ -59,11 +59,17 @@
 
 ## 📦 Installation
 
-Add this to your package's `pubspec.yaml` file:
+Run the following command in your terminal:
+
+```bash
+flutter pub add event_log
+```
+
+Or add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  event_log: ^1.0.0
+  event_log: ^1.0.1
 ```
 
 Then run:
